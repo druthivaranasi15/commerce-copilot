@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Commerce Copilot Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
+        
+        body { 
+            font-family: 'Plus Jakarta Sans', sans-serif; 
+            background: radial-gradient(circle at 50% 0%, #1e1b4b 0%, #0f172a 70%);
+        }
+
+        /* Ambient Background Mesh Blobs */
+        .ambient-glow-1 {
+            background: radial-gradient(circle, rgba(99, 102, 241, 0.15) 0%, transparent 60%);
+            filter: blur(40px);
+        }
+        .ambient-glow-2 {
+            background: radial-gradient(circle, rgba(236, 72, 153, 0.1) 0%, transparent 60%);
+            filter: blur(40px);
+        }
+        
+        /* Scanner Laser Line Animation */
+        @keyframes scan {
+            0% { top: 0%; opacity: 1; }
+            50% { top: 100%; opacity: 1; }
+            100% { top: 0%; opacity: 0.3; }
+        }
+        .laser-line {
+            animation: scan 2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+        }
+
+        /* Glassmorphism Styling Utilities */
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.45);
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+        }
+        .glass-card {
+            background: rgba(30, 41, 59, 0.3);
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.04);
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.2); }
+    </style>
+</head>
+<body class="text-slate-100 min-h-screen selection:bg-indigo-500 selection:text-white relative overflow-hidden">
+
+    <!-- Decorative Background Lights -->
+    <div class="absolute top-[-10%] left-[-10%] w-[50vw] h-[50vw] ambient-glow-1 pointer-events-none z-0"></div>
+    <div class="absolute bottom-[-10%] right-[-10%] w-[50vw] h-[50vw] ambient-glow-2 pointer-events-none z-0"></div>
+
+    <div id="root" class="relative z-10"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        function App() {
+            const [file, setFile] = useState(null);
+            const [previewUrl, setPreviewUrl] = useState(null);
+            const [loading, setLoading] = useState(false);
+            const [currentProduct, setCurrentProduct] = useState(null);
+            const [history, setHistory] = useState([]);
+            const [isDragging, setIsDragging] = useState(false);
+            const [copiedField, setCopiedField] = useState(null);
+            
+            // New Dynamic UI Toggles
+            const [viewMode, setViewMode] = useState('creative'); // 'creative' or 'metadata'
+            const [sidebarOpen, setSidebarOpen] = useState(true);
+
+            const fileInputRef = useRef(null);
+
+            const fetchHistory = async () => {
+                try {
+                    const res = await fetch('http://localhost:5000/api/products');
+                    const data = await res.json();
+                    if (Array.isArray(data)) setHistory(data);
+                } catch (err) {
+                    console.error("Error connecting to history API:", err);
+                }
+            };
+
+            useEffect(() => { fetchHistory(); }, []);
+
+            const handleFileChange = (e) => {
+                const selectedFile = e.target.files[0];
+                if (selectedFile) {
+                    setFile(selectedFile);
+                    setPreviewUrl(URL.createObjectURL(selectedFile));
+                }
+            };
+
+            const handleDragOver = (e) => { e.preventDefault(); setIsDragging(true); };
+            const handleDragLeave = () => { setIsDragging(false); };
+            const handleDrop = (e) => {
+                e.preventDefault();
+                setIsDragging(false);
+                const selectedFile = e.dataTransfer.files[0];
+                if (selectedFile && selectedFile.type.startsWith('image/')) {
+                    setFile(selectedFile);
+                    setPreviewUrl(URL.createObjectURL(selectedFile));
+                }
+            };
+
+            const handleSubmit = async (e) => {
+                e.preventDefault();
+                if (!file) return;
+                setLoading(true);
+                const formData = new FormData();
+                formData.append('image', file);
+
+                try {
+                    const res = await fetch('http://localhost:5000/api/generate-product', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    const data = await res.json();
+                    if (res.ok) {
+                        setCurrentProduct(data);
+                        fetchHistory();
+                    } else {
+                        alert(data.error || "Generation error occurred.");
+                    }
+                } catch (err) {
+                    alert("Unable to hit the API backend. Make sure your node server is running!");
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            const handleTogglePin = async (e, id) => {
+                e.stopPropagation();
+                try {
+                    const res = await fetch(`http://localhost:5000/api/products/${id}/pin`, { method: 'PUT' });
+                    if (res.ok) fetchHistory();
+                } catch (err) {
+                    console.error("Error updating pin status:", err);
+                }
+            };
+
+            const handleDelete = async (e, id) => {
+                e.stopPropagation(); 
+                if (!confirm("Are you sure you want to permanently delete this product match?")) return;
+                try {
+                    const res = await fetch(`http://localhost:5000/api/products/${id}`, { method: 'DELETE' });
+                    if (res.ok) {
+                        if (currentProduct?._id === id) setCurrentProduct(null);
+                        fetchHistory(); 
+                    }
+                } catch (err) {
+                    console.error("Delete network request failure:", err);
+                }
+            };
+
+            const copyToClipboard = (text, fieldName) => {
+                navigator.clipboard.writeText(text);
+                setCopiedField(fieldName);
+                setTimeout(() => setCopiedField(null), 2000);
+            };
+
+            const getBrandStyles = (key) => {
+                const brands = {
+                    amazon: "bg-gradient-to-br from-amber-500/20 to-amber-600/5 border-amber-500/30 text-amber-400 hover:border-amber-400 hover:shadow-[0_0_15px_rgba(245,158,11,0.15)]",
+                    myntra: "bg-gradient-to-br from-pink-500/20 to-pink-600/5 border-pink-500/30 text-pink-400 hover:border-pink-400 hover:shadow-[0_0_15px_rgba(236,72,153,0.15)]",
+                    ajio: "bg-gradient-to-br from-teal-500/20 to-teal-600/5 border-teal-500/30 text-teal-400 hover:border-teal-400 hover:shadow-[0_0_15px_rgba(20,184,166,0.15)]",
+                    googleShopping: "bg-gradient-to-br from-indigo-500/20 to-indigo-600/5 border-indigo-500/30 text-indigo-400 hover:border-indigo-400 hover:shadow-[0_0_15px_rgba(99,102,241,0.15)]"
+                };
+                return brands[key] || "bg-slate-900 border-slate-800 text-slate-200";
+            };
+
+            return (
+                <div class="flex flex-col md:flex-row h-screen overflow-hidden relative">
+                    
+                    {/* COLLAPSIBLE SIDEBAR */}
+                    <div class={`${sidebarOpen ? 'w-full md:w-80' : 'w-0 md:w-0 overflow-hidden border-r-0'} bg-slate-950/80 backdrop-blur-xl border-b md:border-b-0 md:border-r border-slate-800/60 flex flex-col shrink-0 transition-all duration-300 ease-in-out relative z-30`}>
+                        <div class="p-4 border-b border-slate-800/60 flex items-center justify-between">
+                            <div class="flex items-center space-x-2">
+                                <div class="p-2 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl text-white text-xs shadow-lg shadow-indigo-500/30 font-bold">🤖</div>
+                                <h1 class="font-extrabold text-base tracking-tight bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent">Commerce Copilot</h1>
+                            </div>
+                            <button onClick={() => setSidebarOpen(false)} class="hidden md:block text-slate-500 hover:text-slate-300 text-sm transition-colors">
+                                ◂
+                            </button>
+                        </div>
+
+                        <div class="p-3 text-[10px] font-bold uppercase tracking-widest text-slate-500">Saved Deck Collection</div>
+                        
+                        <div class="flex-1 overflow-y-auto px-2 space-y-1.5 pb-4">
+                            {history.length === 0 ? (
+                                <p class="text-slate-600 text-xs p-4 text-center">No catalog elements logged.</p>
+                            ) : history.map((item) => (
+                                <div 
+                                    key={item._id}
+                                    onClick={() => setCurrentProduct(item)}
+                                    class={`group relative w-full text-left p-3 rounded-xl transition-all duration-300 border flex flex-col cursor-pointer ${currentProduct?._id === item._id ? 'bg-gradient-to-r from-indigo-950/40 to-slate-900/40 border-indigo-500/60 shadow-lg text-white' : 'bg-slate-900/20 border-transparent hover:bg-slate-900/40 hover:border-slate-800 text-slate-400 hover:text-slate-200'}`}
+                                >
+                                    <div class="flex justify-between items-start pr-12">
+                                        <span class="font-semibold text-xs truncate w-full flex items-center gap-1.5">
+                                            {item.isPinned && <span class="text-indigo-400 shrink-0">📌</span>}
+                                            <span class="truncate">{item.productName}</span>
+                                        </span>
+                                    </div>
+                                    <span class="text-[10px] text-slate-600 mt-1 font-medium">{new Date(item.createdAt).toLocaleDateString()}</span>
+                                    
+                                    <div class="absolute top-3 right-2 flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                                        <button onClick={(e) => handleTogglePin(e, item._id)} class={`text-[10px] p-1 rounded hover:bg-slate-800 ${item.isPinned ? 'text-indigo-400' : 'text-slate-500'}`}>📌</button>
+                                        <button onClick={(e) => handleDelete(e, item._id)} class="text-slate-500 hover:text-rose-400 text-[10px] p-1 rounded hover:bg-slate-800">✕</button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* SIDEBAR EXPAND TRIGGER BUTTON */}
+                    {!sidebarOpen && (
+                        <button 
+                            onClick={() => setSidebarOpen(true)}
+                            class="hidden md:flex absolute left-4 top-4 z-40 bg-slate-950/80 border border-slate-800 p-2.5 rounded-xl text-slate-400 hover:text-white transition-all shadow-xl backdrop-blur-md"
+                        >
+                            ▸
+                        </button>
+                    )}
+
+                    {/* MAIN CONTENT SPACE */}
+                    <div class="flex-1 overflow-y-auto p-6 md:p-8 space-y-6 transition-all duration-300">
+                        
+                        {/* FILE COMPRESSION UPLOAD HUB */}
+                        <div class="glass-panel rounded-2xl p-6 shadow-2xl relative overflow-hidden group">
+                            <div class="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent via-indigo-500 to-transparent opacity-40 group-hover:opacity-100 transition-opacity duration-500"></div>
+                            
+                            <h2 class="text-lg font-bold mb-4 flex items-center gap-2 text-white tracking-tight">Visual Feature Engine</h2>
+                            
+                            <form onSubmit={handleSubmit} class="space-y-4">
+                                <div 
+                                    onClick={() => fileInputRef.current.click()}
+                                    onDragOver={handleDragOver}
+                                    onDragLeave={handleDragLeave}
+                                    onDrop={handleDrop}
+                                    class={`border border-dashed rounded-xl p-8 text-center cursor-pointer relative transition-all duration-300 flex flex-col items-center justify-center min-h-[150px] ${isDragging ? 'border-indigo-500 bg-indigo-950/20 scale-[1.005] shadow-[0_0_20px_rgba(99,102,241,0.1)]' : 'border-slate-800/80 bg-slate-900/10 hover:bg-slate-900/30'}`}
+                                >
+                                    <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/*" class="hidden" />
+                                    
+                                    {previewUrl ? (
+                                        <div class="flex items-center gap-5 w-full max-w-md relative z-10">
+                                            <div class="relative overflow-hidden rounded-xl border border-slate-700/60 shrink-0 shadow-xl">
+                                                <img src={previewUrl} class="w-20 h-20 object-cover" />
+                                                {loading && <div class="absolute inset-x-0 h-[2px] bg-indigo-400 shadow-[0_0_10px_#818cf8] laser-line"></div>}
+                                            </div>
+                                            <div class="text-left truncate">
+                                                <p class="text-xs font-bold text-white truncate">{file?.name}</p>
+                                                <p class="text-[11px] text-indigo-400 font-semibold tracking-wide mt-0.5">{loading ? "SCANNING COLOR ARRAYS..." : "MATRIX LOADED"}</p>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div class="space-y-2">
+                                            <div class="text-xl opacity-40 group-hover:scale-110 transition-transform duration-300">📤</div>
+                                            <p class="text-xs text-slate-300 font-semibold">Drop apparel file asset or browse</p>
+                                            <p class="text-[10px] text-slate-500">PNG, JPEG, WEBP rules apply</p>
+                                        </div>
+                                    )}
+                                </div>
+
+                                <button 
+                                    type="submit" 
+                                    disabled={!file || loading}
+                                    class="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 disabled:from-slate-800/60 disabled:to-slate-800/60 disabled:text-slate-600 py-3 rounded-xl font-bold transition-all duration-300 shadow-xl flex items-center justify-center space-x-2 text-white text-xs tracking-wider uppercase shadow-indigo-900/20"
+                                >
+                                    {loading ? (
+                                        <span class="flex items-center gap-2">
+                                            <svg class="animate-spin h-3 w-3 text-white" viewBox="0 0 24 24" fill="none"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                                            Compiling Vision Pipelines...
+                                        </span>
+                                    ) : (
+                                        <span>Parse Product Profile</span>
+                                    )}
+                                </button>
+                            </form>
+                        </div>
+
+                        {/* SKELETON SHIMMER PLACEHOLDER ROUTE */}
+                        {loading && !currentProduct && (
+                            <div class="glass-panel rounded-2xl p-6 space-y-5 animate-pulse">
+                                <div class="h-4 bg-slate-800/60 rounded w-1/4"></div>
+                                <div class="space-y-2">
+                                    <div class="h-3 bg-slate-800/40 rounded w-full"></div>
+                                    <div class="h-3 bg-slate-800/40 rounded w-5/6"></div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* RENDER DYNAMIC CANVAS OUTPUT */}
+                        {currentProduct && !loading && (
+                            <div class="glass-panel rounded-2xl p-6 shadow-2xl space-y-6 transition-all duration-500 animate-fadeIn">
+                                
+                                {/* CONTROL DISPLAY INTERACTIVE TOGGLE HEADER */}
+                                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-800/60 pb-4">
+                                    <div>
+                                        <span class="text-[10px] uppercase tracking-widest text-indigo-400 font-extrabold">Active Asset Target</span>
+                                        <h3 class="text-xl font-extrabold text-white tracking-tight mt-0.5">{currentProduct.productName}</h3>
+                                    </div>
+                                    
+                                    {/* DYNAMIC TOGGLE */}
+                                    <div class="bg-slate-950/80 p-1 border border-slate-800 rounded-xl flex space-x-1 shadow-inner self-stretch sm:self-auto">
+                                        <button 
+                                            onClick={() => setViewMode('creative')}
+                                            class={`flex-1 sm:flex-none text-[11px] font-bold px-3 py-1.5 rounded-lg transition-all ${viewMode === 'creative' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200'}`}
+                                        >
+                                            ✨ Copywriter View
+                                        </button>
+                                        <button 
+                                            onClick={() => setViewMode('metadata')}
+                                            class={`flex-1 sm:flex-none text-[11px] font-bold px-3 py-1.5 rounded-lg transition-all ${viewMode === 'metadata' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200'}`}
+                                        >
+                                            📊 Metadata View
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {/* CONDITIONALLY RENDERED PANEL CONFIG */}
+                                {viewMode === 'creative' ? (
+                                    <div class="space-y-4 transition-all">
+                                        <div class="flex justify-between items-center">
+                                            <span class="text-[10px] uppercase tracking-widest text-indigo-400 font-extrabold">Social Commercial Hook</span>
+                                            <button 
+                                                onClick={() => copyToClipboard(currentProduct.description, 'desc')}
+                                                class="text-xs bg-slate-900/60 border border-slate-800 text-slate-400 hover:text-white px-2.5 py-1.5 rounded-lg transition-all"
+                                            >
+                                                {copiedField === 'desc' ? '✓ Copied Text' : '📋 Copy Text Content'}
+                                            </button>
+                                        </div>
+                                        <p class="text-slate-300 leading-relaxed text-sm glass-card p-4 rounded-xl font-medium">{currentProduct.description}</p>
+                                    </div>
+                                ) : (
+                                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 transition-all">
+                                        <div class="glass-card p-4 rounded-xl space-y-2">
+                                            <span class="text-[10px] uppercase tracking-widest text-purple-400 font-bold block">Document Index ID</span>
+                                            <span class="text-xs font-mono text-slate-400 block break-all">{currentProduct._id}</span>
+                                        </div>
+                                        <div class="glass-card p-4 rounded-xl space-y-2">
+                                            <span class="text-[10px] uppercase tracking-widest text-purple-400 font-bold block">Pipeline Execution Date</span>
+                                            <span class="text-xs font-mono text-slate-400 block">{new Date(currentProduct.createdAt).toString()}</span>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* TAG CLOUD LAYER */}
+                                <div>
+                                    <span class="text-[10px] uppercase tracking-widest text-indigo-400 font-extrabold block mb-2">SEO Keyword Matrix</span>
+                                    <div class="flex flex-wrap gap-1.5">
+                                        {currentProduct.tags.map((tag, idx) => (
+                                            <span key={idx} class="bg-indigo-950/30 border border-indigo-500/20 text-indigo-300 text-[11px] font-semibold px-2.5 py-1 rounded-lg">
+                                                #{tag.replace(/\s+/g, '')}
+                                            </span>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* PREMIUM BRAND LIVE ROUTE BADGES */}
+                                <div class="pt-4 border-t border-slate-800/60">
+                                    <span class="text-[10px] uppercase tracking-widest text-indigo-400 font-extrabold block mb-3">Live Marketplace Cross-Reference Router</span>
+                                    <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                                        {Object.entries(currentProduct.availableLinks || {}).map(([key, url]) => {
+                                            if (!url) return null;
+                                            return (
+                                                <a 
+                                                    key={key} 
+                                                    href={url} 
+                                                    target="_blank" 
+                                                    rel="noopener noreferrer"
+                                                    class={`flex flex-col items-center justify-center p-3 border rounded-xl text-xs font-bold tracking-wide transition-all duration-300 text-center capitalize shadow-sm backdrop-blur-sm ${getBrandStyles(key)}`}
+                                                >
+                                                    <span class="text-lg mb-1">
+                                                        {key === 'amazon' ? '📦' : key === 'myntra' ? '🛍️' : key === 'ajio' ? '✨' : '🔍'}
+                                                    </span>
+                                                    {key.replace(/([A-Z])/g, ' $1')}
+                                                </a>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+
+							</div>
+                        )}
+                    </div>
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
