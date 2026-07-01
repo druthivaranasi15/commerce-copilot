@@ -2,6 +2,16 @@
 
 An AI-powered e-commerce assistant that analyzes product images and automatically generates compelling product descriptions, SEO keywords, and cross-references live product links across major Indian e-commerce platforms.
 
+## 📸 Screenshots
+
+### Main Dashboard - Visual Feature Engine
+![Commerce Copilot Dashboard](./images/dashboard-visual-engine.png)
+*Upload product images and analyze them with AI-powered Visual Feature Engine*
+
+### Product Analysis & Description Generation
+![Product Analysis Interface](./images/product-analysis.png)
+*AI generates professional product descriptions, social hooks, and SEO keywords*
+
 ## ✨ Key Features
 
 ### 🖼️ Visual Feature Engine
