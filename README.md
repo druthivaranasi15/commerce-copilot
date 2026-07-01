@@ -5,11 +5,11 @@ An AI-powered e-commerce assistant that analyzes product images and automaticall
 ## 📸 Screenshots
 
 ### Main Dashboard - Visual Feature Engine
-![Commerce Copilot Dashboard](./images/Screenshot%202026-07-01%20175158.png)
+![Commerce Copilot Dashboard](./images/Screenshot%202026-07-01%20180543.png)
 *Upload product images and analyze them with AI-powered Visual Feature Engine*
 
 ### Product Analysis & Description Generation
-![Product Analysis Interface](./images/Screenshot%202026-07-01%20175221.png)
+![Product Analysis Interface](./images/Screenshot%202026-07-01%20180603.png)
 *AI generates professional product descriptions, social hooks, and SEO keywords*
 
 ## ✨ Key Features
